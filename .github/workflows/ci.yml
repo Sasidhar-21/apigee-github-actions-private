@@ -17,10 +17,13 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+        env:
+          HOME: $HOME
 
       - name: execute commands
         run: |
           gcloud projects list
+          cd $HOME && ls && pwd
           zip -r proxy.zip apiproxy
           apigee_revision=$(curl --fail -X POST \
           -H "Content-Type: multipart/form-data" \
