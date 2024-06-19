@@ -36,3 +36,5 @@ jobs:
       - name: Deploy API Proxy to Apigee
         run: |
           curl --fail -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/eval/apis/hello-world/revisions/${{ steps.upload.outputs.apigee-revision }}/deployments?override=true"
