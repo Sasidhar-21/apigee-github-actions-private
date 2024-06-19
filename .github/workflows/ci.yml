@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:  # Manual trigger from GitHub UI
+    inputs:
+      proxy_name:
+        description: 'Proxy Name'
+        required: true
+        type: string
 
 jobs:
   my_job:
@@ -29,7 +34,7 @@ jobs:
           -H "Content-Type: multipart/form-data" \
           -H "Authorization: Bearer $(gcloud auth print-access-token)" \
           -F "file=@proxy.zip" \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=my-api-proxy" \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=${{ github.event.inputs.proxy_name }}" \
           --silent | jq --raw-output .revision)
           echo "::set-output name=apigee-revision::$apigee_revision"
 
