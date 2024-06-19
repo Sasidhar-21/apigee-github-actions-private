@@ -51,5 +51,25 @@ jobs:
           "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=${{ github.event.inputs.proxy_name }}" \
           --silent | jq --raw-output .revision)
           echo "::set-output name=apigee-revision::$apigee_revision"
+          echo "apigee_revision=$apigee_revision" >> $GITHUB_ENV
+          echo "proxy_name=${{ github.event.inputs.proxy_name }}" >> $GITHUB_ENV
+
+      - name: UPSERT API Proxy Entity to Port
+        uses: port-labs/port-github-action@v1
+        with:
+          identifier: "${{ env.proxy_name }}"
+          title: "${{ env.proxy_name }}"
+          blueprint: ${{ fromJson(inputs.port_context).blueprint }}
+          properties: |-
+            {
+              "revision": "${{ env.apigee_revision }}",
+              "status": "deployed",
+              "environment": "eval"
+            }
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: UPSERT
+          runId: ${{ fromJson(inputs.port_context).run_Id }}
 
      
