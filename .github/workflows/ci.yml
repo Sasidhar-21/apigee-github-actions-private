@@ -62,6 +62,7 @@ jobs:
           blueprint: ${{ fromJson(inputs.port_context).blueprint }}
           properties: |-
             {
+              "proxy_name": "${{ env.proxy_name }}",
               "revision": "${{ env.apigee_revision }}",
               "status": "deployed",
               "environment": "eval"
