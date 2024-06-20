@@ -14,27 +14,46 @@ on:
         description: 'Target API URL'
         required: true
         type: string
+      developer_email:
+        description: 'Developer Email'
+        required: true
+        type: string
+      first_name:
+        description: 'Developer First Name'
+        required: true
+        type: string
+      last_name:
+        description: 'Developer Last Name'
+        required: true
+        type: string
+      username:
+        description: 'Developer Username'
+        required: true
+        type: string
+      product_name:
+        description: 'API Product Name'
+        required: true
+        type: string
+      app_name:
+        description: 'App Name'
+        required: true
+        type: string
+      environment:
+        description: 'Environment'
+        required: true
+        type: string
       port_context:
         required: true
         type: string
 
 jobs:
-  my_job:
+  deploy:
+    name: Deploy API to Apigee
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Log starting of Api Proxy ApiGee Infra creation 
-        uses: port-labs/port-github-action@v1
-        with:
-          clientId: ${{ secrets.PORT_CLIENT_ID }}
-          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
-          operation: PATCH_RUN
-          runId: ${{ fromJson(inputs.port_context).run_Id }}
-          logMessage: |
-              About to create api proxy creation ${{ github.event.inputs.proxy_name }} .. ⛴️
 
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
@@ -43,79 +62,102 @@ jobs:
         env:
           HOME: $HOME
 
+      - name: Set Environment Variables
+        run: |
+          echo "proxy_name=${{ github.event.inputs.proxy_name }}" >> $GITHUB_ENV
+          echo "target_url=${{ github.event.inputs.target_url }}" >> $GITHUB_ENV
+          echo "developer_email=${{ github.event.inputs.developer_email }}" >> $GITHUB_ENV
+          echo "first_name=${{ github.event.inputs.first_name }}" >> $GITHUB_ENV
+          echo "last_name=${{ github.event.inputs.last_name }}" >> $GITHUB_ENV
+          echo "username=${{ github.event.inputs.username }}" >> $GITHUB_ENV
+          echo "product_name=${{ github.event.inputs.product_name }}" >> $GITHUB_ENV
+          echo "app_name=${{ github.event.inputs.app_name }}" >> $GITHUB_ENV
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+
       - name: Replace Target URL in XML
         run: |
-          sed -i 's#\${target.url}#${{ github.event.inputs.target_url }}#g' apiproxy/targets/default.xml
+          sed -i 's#\${target.url}#${{ env.target_url }}#g' apiproxy/targets/default.xml
 
-      - name: execute commands
+      - name: Create and Upload API Bundle
+        id: upload
         run: |
-          gcloud projects list
-          ls && pwd
           zip -r proxy.zip apiproxy
           apigee_revision=$(curl --fail -X POST \
           -H "Content-Type: multipart/form-data" \
           -H "Authorization: Bearer $(gcloud auth print-access-token)" \
           -F "file=@proxy.zip" \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=${{ github.event.inputs.proxy_name }}" \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apis?action=import&name=${{ env.proxy_name }}" \
           --silent | jq --raw-output .revision)
-          echo "::set-output name=apigee-revision::$apigee_revision"
           echo "apigee_revision=$apigee_revision" >> $GITHUB_ENV
-          echo "proxy_name=${{ github.event.inputs.proxy_name }}" >> $GITHUB_ENV
 
       - name: Deploy API Proxy to Apigee
         run: |
           curl --fail -X POST \
           -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/eval/apis/${{ env.proxy_name }}/revisions/${{ env.apigee_revision }}/deployments?override=true"
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/${{ env.environment }}/apis/${{ env.proxy_name }}/revisions/${{ env.apigee_revision }}/deployments?override=true"
 
-      - name: Create API Product
+      - name: Create or Use Existing API Product
         run: |
-          curl --fail -X POST \
-          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-          -H "Content-Type: application/json" \
-          -d '{
-                "name": "My-API-Product",
-                "displayName": "My API Product",
-                "approvalType": "manual",
-                "attributes": [],
-                "description": "API Product for My API",
-                "apiResources": ["/"],
-                "environments": ["eval"],
-                "proxies": ["${{ env.proxy_name }}"],
-                "quota": "10000",
-                "quotaInterval": "1",
-                "quotaTimeUnit": "minute"
-              }' \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apiproducts"
+          response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $(gcloud auth print-access-token)" "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apiproducts/${{ env.product_name }}")
+          if [ "$response" -eq 404 ]; then
+            curl --fail -X POST \
+              -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+              -H "Content-Type: application/json" \
+              -d '{
+                    "name": "'${{ env.product_name }}'",
+                    "displayName": "'${{ env.product_name }}'",
+                    "approvalType": "manual",
+                    "attributes": [],
+                    "description": "API Product for '${{ env.product_name }}'",
+                    "apiResources": ["/"],
+                    "environments": ["'${{ env.environment }}'"],
+                    "proxies": ["'${{ env.proxy_name }}'"],
+                    "quota": "10000",
+                    "quotaInterval": "1",
+                    "quotaTimeUnit": "minute"
+                  }' \
+              "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apiproducts"
+          else
+            echo "API Product ${{ env.product_name }} already exists."
+          fi
 
-      - name: Create Developer
+      - name: Create or Use Existing Developer
         run: |
-          curl --fail -X POST \
-          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-          -H "Content-Type: application/json" \
-          -d '{
-                "email": "lucarocco934mag@gmail.com",
-                "firstName": "luca",
-                "lastName": "rocco",
-                "userName": "LucaR"
-              }' \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers"
+          response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $(gcloud auth print-access-token)" "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers/${{ env.developer_email }}")
+          if [ "$response" -eq 404 ]; then
+            curl --fail -X POST \
+              -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+              -H "Content-Type: application/json" \
+              -d '{
+                    "email": "'${{ env.developer_email }}'",
+                    "firstName": "'${{ env.first_name }}'",
+                    "lastName": "'${{ env.last_name }}'",
+                    "userName": "'${{ env.username }}'"
+                  }' \
+              "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers"
+          else
+            echo "Developer ${{ env.developer_email }} already exists."
+          fi
 
-      - name: Create App and Associate with Developer
+      - name: Create or Use Existing App and Associate with Developer
         run: |
-          curl --fail -X POST \
-          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-          -H "Content-Type: application/json" \
-          -d '{
-                "name": "MyApp",
-                "apiProducts": ["My-API-Product"],
-                "keyExpiresIn": "100000000",
-                "attributes": [],
-                "scopes": []
-              }' \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers/lucarocco934mag@gmail.com/apps"
-        
-      
+          response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $(gcloud auth print-access-token)" "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers/${{ env.developer_email }}/apps/${{ env.app_name }}")
+          if [ "$response" -eq 404 ]; then
+            curl --fail -X POST \
+              -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+              -H "Content-Type: application/json" \
+              -d '{
+                    "name": "'${{ env.app_name }}'",
+                    "apiProducts": ["'${{ env.product_name }}'"],
+                    "keyExpiresIn": "100000000",
+                    "attributes": [],
+                    "scopes": []
+                  }' \
+              "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers/${{ env.developer_email }}/apps"
+          else
+            echo "App ${{ env.app_name }} already exists."
+          fi
+
       - name: UPSERT API Proxy Entity to Port
         uses: port-labs/port-github-action@v1
         with:
@@ -127,12 +169,12 @@ jobs:
               "proxy_name": "${{ env.proxy_name }}",
               "revision": "${{ env.apigee_revision }}",
               "status": "deployed",
-              "environment": "eval"
+              "environment": "${{ env.environment }}",
+              "api_product": "${{ env.product_name }}",
+              "app": "${{ env.app_name }}"
             }
           clientId: ${{ secrets.PORT_CLIENT_ID }}
           clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
           baseUrl: https://api.getport.io
           operation: UPSERT
           runId: ${{ fromJson(inputs.port_context).run_Id }}
-
-     
