@@ -10,6 +10,10 @@ on:
         description: 'Proxy Name'
         required: true
         type: string
+      target_url:
+        description: 'Target API URL'
+        required: true
+        type: string
       port_context:
         required: true
         type: string
@@ -38,6 +42,10 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
         env:
           HOME: $HOME
+
+      - name: Replace Target URL in XML
+        run: |
+          sed -i 's#\${target.url}#${{ github.event.inputs.target_url }}#g' apiproxy/targets/default.xml
 
       - name: execute commands
         run: |
