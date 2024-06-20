@@ -54,6 +54,12 @@ jobs:
           echo "apigee_revision=$apigee_revision" >> $GITHUB_ENV
           echo "proxy_name=${{ github.event.inputs.proxy_name }}" >> $GITHUB_ENV
 
+      - name: Deploy API Proxy to Apigee
+        run: |
+          curl --fail -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/eval/apis/${{ env.proxy_name }}/revisions/${{ env.apigee_revision }}/deployments?override=true"
+
       - name: UPSERT API Proxy Entity to Port
         uses: port-labs/port-github-action@v1
         with:
