@@ -60,6 +60,54 @@ jobs:
           -H "Authorization: Bearer $(gcloud auth print-access-token)" \
           "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/eval/apis/${{ env.proxy_name }}/revisions/${{ env.apigee_revision }}/deployments?override=true"
 
+      - name: Create API Product
+        run: |
+          curl --fail -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "name": "My-API-Product",
+                "displayName": "My API Product",
+                "approvalType": "manual",
+                "attributes": [],
+                "description": "API Product for My API",
+                "apiResources": ["/"],
+                "environments": ["eval"],
+                "proxies": ["${{ env.proxy_name }}"],
+                "quota": "10000",
+                "quotaInterval": "1",
+                "quotaTimeUnit": "minute"
+              }' \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apiproducts"
+
+      - name: Create Developer
+        run: |
+          curl --fail -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "email": "lucarocco934mag@gmail.com",
+                "firstName": "luca",
+                "lastName": "rocco",
+                "userName": "LucaR"
+              }' \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers"
+
+      - name: Create App and Associate with Developer
+        run: |
+          curl --fail -X POST \
+          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "name": "MyApp",
+                "apiProducts": ["My-API-Product"],
+                "keyExpiresIn": "100000000",
+                "attributes": [],
+                "scopes": []
+              }' \
+          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/developers/lucarocco934mag@gmail.com/apps"
+        
+      
       - name: UPSERT API Proxy Entity to Port
         uses: port-labs/port-github-action@v1
         with:
