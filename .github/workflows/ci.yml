@@ -90,12 +90,7 @@ jobs:
           --silent | jq --raw-output .revision)
           echo "apigee_revision=$apigee_revision" >> $GITHUB_ENV
 
-      - name: Deploy API Proxy to Apigee
-        run: |
-          curl --fail -X POST \
-          -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-          "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/environments/${{ env.environment }}/apis/${{ env.proxy_name }}/revisions/${{ env.apigee_revision }}/deployments?override=true"
-
+      
       - name: Create or Use Existing API Product
         run: |
           response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $(gcloud auth print-access-token)" "https://apigee.googleapis.com/v1/organizations/${{ secrets.APIGEE_ORG }}/apiproducts/${{ env.product_name }}")
